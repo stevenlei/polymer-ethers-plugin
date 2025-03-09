@@ -30,7 +30,7 @@ addPolymerToEthers(ethers, {
 });
 
 // Request a proof for a specific block, transaction, and log
-const jobId = await ethers.polymer.requestProof({
+const proof = await ethers.polymer.requestProof({
   srcChainId: 11155420, // Optimism Sepolia
   srcBlockNumber: 123456,
   txIndex: 0,
@@ -38,9 +38,7 @@ const jobId = await ethers.polymer.requestProof({
   eventSignature: "Transfer(address,address,uint256)", // The event signature to generate a proof for
 });
 
-// Wait for the proof to be generated
-const proofResult = await ethers.polymer.wait(jobId);
-console.log("Proof:", proofResult);
+console.log("Proof:", proof);
 ```
 
 ### With Transaction Receipt
@@ -60,17 +58,19 @@ const receipt = await ethers.provider.getTransactionReceipt(
 );
 
 // Option 1: Generate proof using logIndex
-const jobId1 = await receipt.polymerProof({
+const { jobId } = await receipt.polymerProof({
   logIndex: 1, // The index of the log to generate a proof for
+  returnJob: true, // Return the job ID instead of waiting for the proof
 });
 
 // Option 2: Generate proof using eventSignature (automatically finds the log index)
-const jobId2 = await receipt.polymerProof({
+const { jobId } = await receipt.polymerProof({
   eventSignature: "ValueSet(address,string,bytes,uint256,bytes32,uint256)", // The event signature to generate a proof for
+  returnJob: true, // Return the job ID instead of waiting for the proof
 });
 
 // Wait for the proof to be generated
-const proofResult = await ethers.polymer.wait(jobId1);
+const proofResult = await ethers.polymer.wait(jobId);
 console.log("Proof:", proofResult);
 ```
 
