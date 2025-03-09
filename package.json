@@ -1,5 +1,5 @@
 {
-  "name": "@polymer/ethers-plugin",
+  "name": "@stevenlei/polymer-ethers-plugin",
   "version": "1.0.0",
   "description": "A plugin for Ethers.js v6 that adds Polymer proof capabilities, allowing you to generate and verify cross-chain transaction proofs.",
   "main": "src/polymer-ethers-plugin.js",
@@ -18,7 +18,25 @@
   "author": "Polymer",
   "license": "MIT",
   "dependencies": {
-    "dotenv": "^16.3.1",
+    "dotenv": "^16.3.1"
+  },
+  "peerDependencies": {
+    "ethers": "^6.0.0"
+  },
+  "devDependencies": {
     "ethers": "^6.13.5"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stevenlei/polymer-ethers-plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stevenlei/polymer-ethers-plugin/issues"
+  },
+  "homepage": "https://github.com/stevenlei/polymer-ethers-plugin#readme",
+  "files": [
+    "src/",
+    "LICENSE",
+    "README.md"
+  ]
 }
