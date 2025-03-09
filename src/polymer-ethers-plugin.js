@@ -21,14 +21,19 @@
  * const tx = await contract.someFunction();
  * await tx.wait();
  *
+ * // Get transaction receipt
+ * const receipt = await tx.wait();
+ *
  * // Get Polymer proof (returns the raw proof)
- * const proof = await tx.polymerProof({
- *   targetChainId: 84532, // Base Sepolia
+ * const proof = await receipt.polymerProof({
+ *   eventSignature: "Transfer(address,address,uint256)",
+ *   logIndex: 0,
  * });
  *
  * // Advanced usage with maxAttempts and interval
- * const proof = await tx.polymerProof({
- *   targetChainId: 84532, // Base Sepolia
+ * const proof = await receipt.polymerProof({
+ *   eventSignature: "Transfer(address,address,uint256)",
+ *   logIndex: 0,
  *   maxAttempts: 20,      // Maximum polling attempts
  *   interval: 3000        // Polling interval in ms
  * });
@@ -69,89 +74,6 @@ function addPolymerToEthers(ethers, config = {}) {
 
   logger.log("Initializing Polymer Ethers plugin with config:", polymerConfig);
 
-  // Extend TransactionResponse prototype for ethers v6
-  if (
-    ethers.TransactionResponse &&
-    !ethers.TransactionResponse.prototype.polymerProof
-  ) {
-    /**
-     * Request and retrieve a Polymer proof for this transaction
-     *
-     * @param {Object} options - Options for proof generation
-     * @param {number} options.targetChainId - Target chain ID (required, must be different from source)
-     * @param {number} [options.maxAttempts] - Maximum polling attempts
-     * @param {number} [options.interval] - Polling interval in ms
-     * @param {boolean} [options.returnJob] - If true, returns the job object instead of the proof
-     * @returns {Promise<string|Object>} The proof as a hex string or the job object
-     */
-    ethers.TransactionResponse.prototype.polymerProof = async function (
-      options = {}
-    ) {
-      const receipt = await this.wait();
-      if (!receipt) {
-        throw new Error("Transaction receipt not available");
-      }
-
-      // Get chainId from the transaction if not specified in provider
-      const chainId =
-        this.chainId ||
-        (this.provider && (await this.provider.getNetwork())).chainId;
-      if (!chainId) {
-        throw new Error("Chain ID not found in transaction or provider");
-      }
-
-      // Extract parameters for Polymer API
-      const srcChainId = Number(chainId);
-      const blockNumber = receipt.blockNumber;
-      const txIndex = receipt.index;
-
-      // Validate targetChainId is provided and different from source chain
-      if (!options.targetChainId) {
-        throw new Error("targetChainId is required for proof generation");
-      }
-
-      if (Number(options.targetChainId) === srcChainId) {
-        throw new Error(
-          "Target chain ID must be different from source chain ID"
-        );
-      }
-
-      logger.log("Transaction details:", {
-        srcChainId,
-        targetChainId: options.targetChainId,
-        blockNumber,
-        txIndex,
-        transactionHash: this.hash,
-      });
-
-      // Set options with defaults from config
-      const {
-        targetChainId,
-        maxAttempts = polymerConfig.maxAttempts,
-        interval = polymerConfig.interval,
-        returnJob = false,
-      } = options;
-
-      // Request the proof
-      const jobId = await requestProof(
-        polymerConfig,
-        srcChainId,
-        targetChainId,
-        blockNumber,
-        txIndex
-      );
-
-      logger.log("Proof job created with ID:", jobId);
-
-      if (returnJob) {
-        return { jobId, receipt };
-      }
-
-      // Poll for proof completion
-      return wait(polymerConfig, jobId, maxAttempts, interval);
-    };
-  }
-
   // Extend TransactionReceipt prototype for ethers v6
   if (
     ethers.TransactionReceipt &&
@@ -161,7 +83,8 @@ function addPolymerToEthers(ethers, config = {}) {
      * Request and retrieve a Polymer proof for this transaction receipt
      *
      * @param {Object} options - Options for proof generation
-     * @param {number} options.targetChainId - Target chain ID (required, must be different from source)
+     * @param {string} [options.eventSignature] - The event signature to generate a proof for
+     * @param {number} [options.logIndex] - The log index of the event to generate a proof for
      * @param {number} [options.maxAttempts] - Maximum polling attempts
      * @param {number} [options.interval] - Polling interval in ms
      * @param {boolean} [options.returnJob] - If true, returns the job object instead of the proof
@@ -184,43 +107,59 @@ function addPolymerToEthers(ethers, config = {}) {
 
       // Extract parameters for Polymer API
       const srcChainId = Number(chainId);
-      const blockNumber = this.blockNumber;
+      const srcBlockNumber = this.blockNumber;
       const txIndex = this.index;
 
-      // Validate targetChainId is provided and different from source chain
-      if (!options.targetChainId) {
-        throw new Error("targetChainId is required for proof generation");
+      // Set options with defaults from config
+      const {
+        maxAttempts = polymerConfig.maxAttempts,
+        interval = polymerConfig.interval,
+        returnJob = false,
+        eventSignature,
+        logIndex: providedLogIndex,
+      } = options;
+
+      if (!eventSignature && typeof providedLogIndex !== "number") {
+        throw new Error("eventSignature or logIndex is required");
       }
 
-      if (Number(options.targetChainId) === srcChainId) {
-        throw new Error(
-          "Target chain ID must be different from source chain ID"
+      if (providedLogIndex !== undefined && providedLogIndex < 0) {
+        throw new Error("logIndex must be non-negative");
+      }
+
+      let localLogIndex = providedLogIndex;
+
+      if (typeof providedLogIndex !== "number") {
+        // Find the local log index of the target event
+        const eventTopic = ethers.id(eventSignature);
+        const foundIndex = this.logs.findIndex(
+          (log) => log.topics[0] === eventTopic
         );
+
+        if (foundIndex === -1) {
+          throw new Error(
+            `Event ${eventSignature} not found in transaction receipt`
+          );
+        }
+
+        localLogIndex = foundIndex;
       }
 
       logger.log("Transaction receipt details:", {
         srcChainId,
-        targetChainId: options.targetChainId,
-        blockNumber,
+        srcBlockNumber,
         txIndex,
+        localLogIndex,
         transactionHash: this.hash,
       });
-
-      // Set options with defaults from config
-      const {
-        targetChainId,
-        maxAttempts = polymerConfig.maxAttempts,
-        interval = polymerConfig.interval,
-        returnJob = false,
-      } = options;
 
       // Request the proof
       const jobId = await requestProof(
         polymerConfig,
         srcChainId,
-        targetChainId,
-        blockNumber,
-        txIndex
+        srcBlockNumber,
+        txIndex,
+        localLogIndex
       );
 
       logger.log("Proof job created with ID:", jobId);
@@ -272,20 +211,20 @@ function addPolymerToEthers(ethers, config = {}) {
      * Request a proof for a transaction
      *
      * @param {Object} params - Parameters for proof generation
-     * @param {number} params.chainId - Chain ID
-     * @param {number} params.blockNumber - Block number
-     * @param {number} params.txIndex - Transaction index
-     * @param {number} [params.targetChainId] - Target chain ID (if different from source)
+     * @param {number} [params.srcChainId] - Source chain ID
+     * @param {number} [params.srcBlockNumber] - Source block number
+     * @param {number} [params.txIndex] - Transaction index
+     * @param {number} [params.logIndex] - Log index
      * @returns {Promise<string>} Job ID for the proof request
      */
     requestProof: async (params) => {
-      const { chainId, blockNumber, txIndex, targetChainId } = params;
+      const { srcChainId, srcBlockNumber, txIndex, logIndex } = params;
       return requestProof(
         polymerConfig,
-        chainId,
-        targetChainId,
-        blockNumber,
-        txIndex
+        srcChainId,
+        srcBlockNumber,
+        txIndex,
+        logIndex
       );
     },
 
@@ -323,22 +262,20 @@ function addPolymerToEthers(ethers, config = {}) {
  *
  * @param {Object} config - Polymer configuration
  * @param {number} srcChainId - Source chain ID
- * @param {number} targetChainId - Target chain ID (optional)
- * @param {number} blockNumber - Block number
+ * @param {number} srcBlockNumber - Source block number
  * @param {number} txIndex - Transaction index
+ * @param {number} localLogIndex - Local log index
  * @returns {Promise<string>} Job ID for the proof request
  */
 async function requestProof(
   config,
   srcChainId,
-  targetChainId,
-  blockNumber,
-  txIndex
+  srcBlockNumber,
+  txIndex,
+  localLogIndex
 ) {
-  const method = "receipt_requestProof";
-  const params = targetChainId
-    ? [srcChainId, targetChainId, blockNumber, txIndex]
-    : [srcChainId, blockNumber, txIndex];
+  const method = "log_requestProof";
+  const params = [srcChainId, srcBlockNumber, txIndex, localLogIndex];
 
   const logger = createLogger(config.debug);
   logger.log("Requesting proof with params:", params);
@@ -398,7 +335,7 @@ async function queryProofStatus(config, jobId) {
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
-        method: "receipt_queryProof",
+        method: "log_queryProof",
         params: [jobId],
       }),
     });

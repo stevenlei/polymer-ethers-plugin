@@ -110,12 +110,13 @@ async function main() {
 
     // Request a proof directly from the transaction receipt
     printInfo(
-      `Requesting proof from ${colors.magenta}Optimism Sepolia${colors.reset} to ${colors.blue}Base Sepolia${colors.reset}...`
+      `Requesting proof from ${colors.magenta}Optimism Sepolia${colors.reset}...`
     );
 
     // Call polymerProof directly on the transaction receipt
     const { jobId } = await receipt.polymerProof({
-      targetChainId: BASE_SEPOLIA_CHAIN_ID, // Base Sepolia
+      logIndex: 1,
+      // eventSignature: "ValueSet(address,string,bytes,uint256,bytes32,uint256)",
       returnJob: true, // Return the job ID instead of waiting for the proof
     });
 

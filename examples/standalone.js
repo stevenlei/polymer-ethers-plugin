@@ -27,7 +27,6 @@ const {
 
 // Configuration
 const OPTIMISM_SEPOLIA_RPC = "https://sepolia.optimism.io";
-const BASE_SEPOLIA_CHAIN_ID = 84532; // Base Sepolia Chain ID
 const POLYMER_API_KEY = process.env.POLYMER_API_KEY;
 
 // Check for API key
@@ -90,8 +89,38 @@ async function main() {
     );
 
     if (latestBlock.transactions.length > 0) {
-      const txIndex = 0; // Use the first transaction in the block
-      const txHash = latestBlock.transactions[txIndex];
+      printInfo("Searching for a transaction with logs...");
+
+      // We need to check transaction receipts to find one with logs
+      let txWithLogsIndex = -1;
+      let txWithLogsHash = null;
+
+      // Check up to 5 transactions to find one with logs (to avoid checking too many)
+      const maxTxToCheck = Math.min(5, latestBlock.transactions.length);
+
+      for (let i = 0; i < maxTxToCheck; i++) {
+        const txHash = latestBlock.transactions[i];
+        const receipt = await provider.getTransactionReceipt(txHash);
+
+        if (receipt && receipt.logs && receipt.logs.length > 0) {
+          txWithLogsIndex = i;
+          txWithLogsHash = txHash;
+          printSuccess(
+            `Found transaction with ${receipt.logs.length} logs at index ${i}`
+          );
+          break;
+        }
+      }
+
+      if (txWithLogsIndex === -1) {
+        printWarning(
+          `No transactions with logs found in the first ${maxTxToCheck} transactions of block ${latestBlock.number}. Please restart the script.`
+        );
+        return;
+      }
+
+      const txIndex = txWithLogsIndex;
+      const txHash = txWithLogsHash;
 
       printHeader("PROOF GENERATION");
 
@@ -101,13 +130,13 @@ async function main() {
 
       // Request a proof
       printInfo(
-        `Requesting proof from ${colors.magenta}Optimism Sepolia${colors.reset} to ${colors.blue}Base Sepolia${colors.reset}...`
+        `Requesting proof from ${colors.magenta}Optimism Sepolia${colors.reset}...`
       );
       const jobId = await ethers.polymer.requestProof({
-        chainId: Number(network.chainId), // Optimism Sepolia
-        targetChainId: BASE_SEPOLIA_CHAIN_ID, // Base Sepolia
-        blockNumber: latestBlock.number, // The block number we want to find the transaction in
-        txIndex: txIndex, // The index of the transaction that we want to prove in the block
+        srcChainId: Number(network.chainId),
+        srcBlockNumber: latestBlock.number,
+        txIndex,
+        logIndex: 0 /* for demo purposes, use the first log of the transaction */,
       });
 
       printSuccess(

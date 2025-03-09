@@ -29,12 +29,13 @@ addPolymerToEthers(ethers, {
   apiKey: process.env.POLYMER_API_KEY,
 });
 
-// Request a proof for a specific block and transaction
+// Request a proof for a specific block, transaction, and log
 const jobId = await ethers.polymer.requestProof({
-  chainId: 11155420, // Optimism Sepolia
-  targetChainId: 84532, // Base Sepolia (required, must be different from source chain)
-  blockNumber: 123456,
+  srcChainId: 11155420, // Optimism Sepolia
+  srcBlockNumber: 123456,
   txIndex: 0,
+  logIndex: 0, // The index of the log to generate a proof for, or
+  eventSignature: "Transfer(address,address,uint256)", // The event signature to generate a proof for
 });
 
 // Wait for the proof to be generated
@@ -57,12 +58,19 @@ addPolymerToEthers(ethers, {
 const receipt = await ethers.provider.getTransactionReceipt(
   "0x5138b0d6ffe7bfe8f1d7dca24d396dab804fa664930ef96bb9e6ebbc86426fbb"
 );
-const jobId = await receipt.polymerProof({
-  targetChainId: 84532, // Base Sepolia (required, must be different from source chain)
+
+// Option 1: Generate proof using logIndex
+const jobId1 = await receipt.polymerProof({
+  logIndex: 1, // The index of the log to generate a proof for
+});
+
+// Option 2: Generate proof using eventSignature (automatically finds the log index)
+const jobId2 = await receipt.polymerProof({
+  eventSignature: "ValueSet(address,string,bytes,uint256,bytes32,uint256)", // The event signature to generate a proof for
 });
 
 // Wait for the proof to be generated
-const proofResult = await ethers.polymer.wait(jobId);
+const proofResult = await ethers.polymer.wait(jobId1);
 console.log("Proof:", proofResult);
 ```
 
@@ -98,29 +106,33 @@ addPolymerToEthers(ethers, {
 
 The plugin adds the following methods to the ethers library:
 
-| Method                        | Description                                              |
-| ----------------------------- | -------------------------------------------------------- |
-| ethers.polymer.requestProof   | Request a proof for a specific block and transaction     |
-| ethers.polymer.wait           | Wait for a proof to be generated (replaces pollForProof) |
-| ethers.polymer.getProofStatus | Check the status of a proof generation job               |
-| receipt.polymerProof          | Request a proof for a transaction receipt                |
-| receipt.polymerProofStatus    | Check the status of a proof for a transaction receipt    |
+| Method                        | Description                                                |
+| ----------------------------- | ---------------------------------------------------------- |
+| ethers.polymer.requestProof   | Request a proof for a specific block, transaction, and log |
+| ethers.polymer.wait           | Wait for a proof to be generated (replaces pollForProof)   |
+| ethers.polymer.getProofStatus | Check the status of a proof generation job                 |
+| receipt.polymerProof          | Request a proof for a transaction receipt                  |
+| receipt.polymerProofStatus    | Check the status of a proof for a transaction receipt      |
 
 #### ethers.polymer.requestProof(options)
 
-Requests a proof for a specific block and transaction.
+Requests a proof for a specific block, transaction, and log.
 
 **Parameters:**
 
 - `options` (Object):
-  - `chainId` (number): The source chain ID
-  - `targetChainId` (number, required): The destination chain ID (must be different from source chain)
-  - `blockNumber` (number): The block number
+  - `srcChainId` (number): The source chain ID
+  - `srcBlockNumber` (number): The source block number
   - `txIndex` (number): The transaction index in the block
+  - `logIndex` (number, optional): The log index in the transaction
+  - `eventSignature` (string, optional): The event signature to generate a proof for (e.g., "Transfer(address,address,uint256)")
+  - `returnJob` (boolean, optional): If true, returns the job ID without waiting
+
+> **Note:** Either `logIndex` or `eventSignature` must be provided.
 
 **Returns:**
 
-- `Promise<string>`: A promise that resolves to the job ID
+- `Promise<{ jobId: string, proof: Object }>`: A promise that resolves to the job ID and proof result
 
 #### ethers.polymer.wait(jobId, maxAttempts, interval)
 
@@ -155,10 +167,13 @@ Requests a proof for a transaction receipt.
 **Parameters:**
 
 - `options` (Object):
-  - `targetChainId` (number, required): The destination chain ID (must be different from source chain)
+  - `logIndex` (number, optional): The log index of the event to generate a proof for
+  - `eventSignature` (string, optional): The event signature to generate a proof for (e.g., "Transfer(address,address,uint256)")
   - `maxAttempts` (number, optional): Maximum number of polling attempts
   - `interval` (number, optional): Polling interval in milliseconds
   - `returnJob` (boolean, optional): If true, returns the job ID without waiting
+
+**Note:** Either `eventSignature` or `logIndex` must be provided.
 
 **Returns:**
 
