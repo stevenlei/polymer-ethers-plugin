@@ -13,7 +13,7 @@ Polymer makes cross-rollup interoperability fast and easy for application builde
 ## Installation
 
 ```bash
-npm install @stevenlei/polymer-ethers-plugin ethers
+npm install polymer-ethers-plugin ethers
 ```
 
 ## Usage
@@ -22,7 +22,7 @@ npm install @stevenlei/polymer-ethers-plugin ethers
 
 ```javascript
 const { ethers } = require("ethers");
-const { addPolymerToEthers } = require("@stevenlei/polymer-ethers-plugin");
+const { addPolymerToEthers } = require("polymer-ethers-plugin");
 
 // Initialize the plugin with your API key
 addPolymerToEthers(ethers, {
@@ -47,7 +47,7 @@ console.log("Proof:", proofResult);
 
 ```javascript
 const { ethers } = require("ethers");
-const { addPolymerToEthers } = require("@stevenlei/polymer-ethers-plugin");
+const { addPolymerToEthers } = require("polymer-ethers-plugin");
 
 // Initialize the plugin with your API key
 addPolymerToEthers(ethers, {
